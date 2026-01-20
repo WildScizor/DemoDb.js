@@ -12,13 +12,16 @@ const ATLAS_URI = process.env.ATLAS_URI || "";
 
 mongoose.connect(ATLAS_URI)
   .then(() => console.log("MongoDB connected"))
-  .catch(err => console.error("MongoDB error:", err));
+  .catch((err) => {
+    console.error("MongoDB connection error:", err.message);
+    process.exit(1);
+  });
 
 app.use(cors());
 app.use(express.json());
 
-// This handles the logic you had in routes.js
-app.post("/register", async (req, res) => {
+// API ROUTES (From your routes.js logic)
+app.post("/api/register", async (req, res) => {
   try {
     const db = mongoose.connection.db;
     const result = await db.collection("users").insertOne(req.body);
@@ -28,7 +31,19 @@ app.post("/register", async (req, res) => {
   } 
 });
 
-// This serves your frontend
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const db = mongoose.connection.db;
+    const user = await db.collection("users").findOne({ email, password });
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    res.json({ message: `Welcome ${user.name}`, user });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// SERVE FRONTEND (This is the part that makes the website load)
 app.use(express.static(path.join(__dirname, "build")));
 
 app.get("*", (req, res) => {
