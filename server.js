@@ -4,6 +4,9 @@ const mongoose = require("mongoose");
 const path = require("path");
 const dotenv = require("dotenv");
 
+// REASON: Imports your specific routes file
+const router = require("./middleware/routes"); 
+
 dotenv.config({ path: path.join(__dirname, "config.env") });
 
 const app = express();
@@ -17,18 +20,10 @@ mongoose.connect(ATLAS_URI)
 app.use(cors());
 app.use(express.json());
 
-// API ROUTE (From your routes.js logic)
-app.post("/register", async (req, res) => {
-  try {
-    const db = mongoose.connection.db;
-    const result = await db.collection("users").insertOne(req.body);
-    res.status(201).json({ message: "Registered successfully", userId: result.insertedId });
-  } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
-  } 
-});
+// REASON: This connects your routes.js logic to the server
+app.use("/", router);
 
-// SERVE FRONTEND (This is why it wasn't loading before)
+// REASON: This serves the React frontend
 app.use(express.static(path.join(__dirname, "build")));
 
 app.get("*", (req, res) => {
