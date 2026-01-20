@@ -10,42 +10,55 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const ATLAS_URI = process.env.ATLAS_URI || "";
 
+// Simplified connection for Mongoose 8+
 mongoose.connect(ATLAS_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => {
-    console.error("MongoDB connection error:", err.message);
+    console.error("MongoDB error:", err.message);
     process.exit(1);
   });
+
+const User = mongoose.model("User", new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+}));
 
 app.use(cors());
 app.use(express.json());
 
-// API ROUTES (From your routes.js logic)
+// API Routes
 app.post("/api/register", async (req, res) => {
   try {
-    const db = mongoose.connection.db;
-    const result = await db.collection("users").insertOne(req.body);
-    res.status(201).json({ message: "Registered successfully", userId: result.insertedId });
-  } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
-  } 
+    const user = await User.create(req.body);
+    res.status(201).json({ message: "Registered successfully", user });
+  } catch (err) {
+    res.status(500).json({ error: "Email might already exist" });
+  }
 });
 
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const db = mongoose.connection.db;
-    const user = await db.collection("users").findOne({ email, password });
+    const user = await User.findOne({ email, password });
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
     res.json({ message: `Welcome ${user.name}`, user });
   } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Login failed" });
   }
 });
 
-// SERVE FRONTEND (This is the part that makes the website load)
-app.use(express.static(path.join(__dirname, "build")));
+app.get("/api/records", async (req, res) => {
+  try {
+    const users = await User.find();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: "Could not fetch users" });
+  }
+});
 
+// Serve Frontend
+app.use(express.static(path.join(__dirname, "build")));
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "build", "index.html"));
 });
