@@ -1,135 +1,111 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 const cors = require("cors");
+const mongoose = require("mongoose");
+const path = require("path");
+const dotenv = require("dotenv");
+
+// Load config (config.env for local; set env vars in Vercel dashboard)
+dotenv.config({ path: path.join(__dirname, "config.env") });
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const ATLAS_URI = process.env.ATLAS_URI || "";
+console.log("ATLAS_URI =", process.env.ATLAS_URI);
 
-// Path to our "database" file
-const DB_PATH = path.join(__dirname, "db.json");
-
-// Ensure db.json exists with a basic structure
-function initDb() {
-  if (!fs.existsSync(DB_PATH)) {
-    const initialData = { users: [] };
-    fs.writeFileSync(DB_PATH, JSON.stringify(initialData, null, 2), "utf-8");
-  }
-}
-
-function readDb() {
-  initDb();
-  const raw = fs.readFileSync(DB_PATH, "utf-8");
-  try {
-    const data = JSON.parse(raw);
-    // Always keep users deduplicated on read
-    const cleaned = dedupeUsers(data);
-    // Persist any cleanup back to disk
-    writeDb(cleaned);
-    return cleaned;
-  } catch (err) {
-    console.error("Failed to parse db.json, resetting file:", err);
-    const initialData = { users: [] };
-    fs.writeFileSync(DB_PATH, JSON.stringify(initialData, null, 2), "utf-8");
-    return initialData;
-  }
-}
-
-function writeDb(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
-}
-
-function normalizeEmail(email) {
-  return (email || "").trim().toLowerCase();
-}
-
-function dedupeUsers(db) {
-  if (!db || !Array.isArray(db.users)) return db;
-  const seen = new Set();
-  db.users = db.users.filter((u) => {
-    const key = normalizeEmail(u.email);
-    if (!key) return false;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+// Connect to MongoDB Atlas
+mongoose
+  .connect(ATLAS_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err.message);
+    process.exit(1);
   });
-  return db;
-}
+
+// User schema & model
+const userSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password: { type: String, required: true },
+    confirmPassword: { type: String, default: "" },
+  },
+  { timestamps: true }
+);
+
+userSchema.set("toJSON", {
+  virtuals: true,
+  transform: (_, ret) => {
+    ret.id = ret._id.toString();
+    delete ret._id;
+    delete ret.__v;
+    return ret;
+  },
+});
+
+const User = mongoose.model("User", userSchema);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// CRUD routes for users
-
 // CREATE user
-app.post("/users", (req, res) => {
-  const { name, email, password, confirmPassword } = req.body;
+app.post("/users", async (req, res) => {
+  try {
+    const { name, email, password, confirmPassword } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "name, email and password are required" });
+    }
 
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: "name, email and password are required" });
-  }
+    const existing = await User.findOne({ email: email.toLowerCase().trim() }).lean();
+    if (existing) {
+      return res
+        .status(409)
+        .json({ message: "User Not Available", userNotAvailable: true });
+    }
 
-  let db = readDb();
-  db = dedupeUsers(db);
+    const user = await User.create({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password,
+      confirmPassword: confirmPassword || "",
+    });
 
-  const normalizedEmail = normalizeEmail(email);
-
-  // Check if user already exists by email (case/space insensitive)
-  const existingUser = db.users.find(
-    (u) => normalizeEmail(u.email) === normalizedEmail
-  );
-  if (existingUser) {
     return res
-      .status(409)
-      .json({ message: "User Not Available", userNotAvailable: true });
+      .status(201)
+      .json({ message: "Registered successfully", user: user.toJSON() });
+  } catch (err) {
+    console.error("Create user error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  // Simple unique id generation
-  const newId =
-    db.users.length > 0 ? Math.max(...db.users.map((u) => u.id || 0)) + 1 : 1;
-
-  const newUser = {
-    id: newId,
-    name: name.trim(),
-    email: normalizedEmail,
-    password,
-    confirmPassword: confirmPassword || "",
-    createdAt: new Date().toISOString(),
-  };
-
-  db.users.push(newUser);
-  writeDb(db);
-
-  return res
-    .status(201)
-    .json({ message: "Registered successfully", user: newUser });
 });
 
-// LOGIN (signin) - simple email/password match
-app.post("/login", (req, res) => {
+// LOGIN (signin)
+app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
       return res
         .status(400)
         .json({ error: "email and password are required for login" });
     }
 
-    let db = readDb();
-    db = dedupeUsers(db);
-    const normalizedEmail = normalizeEmail(email);
-    const user = db.users.find(
-      (u) => normalizeEmail(u.email) === normalizedEmail && u.password === password
-    );
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+      password,
+    }).lean();
 
     if (!user) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    // For now, just return the user data (no JWT/session)
-    return res.json({ message: `Welcome ${user.name}`, user });
+    return res.json({
+      message: `Welcome ${user.name}`,
+      user: { ...user, id: user._id.toString() },
+    });
   } catch (err) {
     console.error("Login error:", err);
     return res.status(500).json({ error: "Internal server error" });
@@ -137,86 +113,70 @@ app.post("/login", (req, res) => {
 });
 
 // READ all users
-app.get("/users", (req, res) => {
-  let db = readDb();
-  db = dedupeUsers(db);
-  writeDb(db);
-  res.json(db.users);
+app.get("/users", async (_req, res) => {
+  try {
+    const users = await User.find().sort({ createdAt: -1 }).lean();
+    const normalized = users.map((u) => ({ ...u, id: u._id.toString() }));
+    return res.json(normalized);
+  } catch (err) {
+    console.error("List users error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // READ single user by id
-app.get("/users/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const db = readDb();
-  const user = db.users.find((u) => u.id === id);
-
-  if (!user) {
+app.get("/users/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).lean();
+    if (!user) return res.status(404).json({ error: "User not found" });
+    return res.json({ ...user, id: user._id.toString() });
+  } catch (err) {
     return res.status(404).json({ error: "User not found" });
   }
-
-  res.json(user);
 });
 
-// UPDATE user (full update)
-app.put("/users/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const db = readDb();
-  const index = db.users.findIndex((u) => u.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({ error: "User not found" });
+// UPDATE user (full)
+app.put("/users/:id", async (req, res) => {
+  try {
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    ).lean();
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    return res.json({ ...updated, id: updated._id.toString() });
+  } catch (err) {
+    console.error("Update user error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  const existing = db.users[index];
-  const updated = {
-    ...existing,
-    ...req.body,
-    id, // ensure id is not changed
-  };
-
-  db.users[index] = updated;
-  writeDb(db);
-
-  res.json(updated);
 });
 
 // PARTIAL UPDATE user
-app.patch("/users/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const db = readDb();
-  const index = db.users.findIndex((u) => u.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({ error: "User not found" });
+app.patch("/users/:id", async (req, res) => {
+  try {
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    ).lean();
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    return res.json({ ...updated, id: updated._id.toString() });
+  } catch (err) {
+    console.error("Patch user error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  const existing = db.users[index];
-  const updated = {
-    ...existing,
-    ...req.body,
-    id, // keep id immutable
-  };
-
-  db.users[index] = updated;
-  writeDb(db);
-
-  res.json(updated);
 });
 
 // DELETE user
-app.delete("/users/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const db = readDb();
-  const index = db.users.findIndex((u) => u.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({ error: "User not found" });
+app.delete("/users/:id", async (req, res) => {
+  try {
+    const deleted = await User.findByIdAndDelete(req.params.id).lean();
+    if (!deleted) return res.status(404).json({ error: "User not found" });
+    return res.json({ deleted: { ...deleted, id: deleted._id.toString() } });
+  } catch (err) {
+    console.error("Delete user error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  const [removed] = db.users.splice(index, 1);
-  writeDb(db);
-
-  res.json({ deleted: removed });
 });
 
 app.listen(PORT, () => {
