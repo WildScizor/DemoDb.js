@@ -120,6 +120,8 @@ export default function RegisterForm() {
                 </li>
               ))}
             </ul>
+          ) : (
+            <p> No registered users found.</p>
           )}
         </div>
       )}
