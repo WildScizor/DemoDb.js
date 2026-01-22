@@ -87,8 +87,18 @@ export default function RegisterForm() {
     <div className="auth-wrapper">
       <div className="auth-container">
         <div className="toggle-buttons">
-          <button onClick={() => setMode("signup")} className={mode === "signup" ? "active-toggle" : ""}>Signup</button>
-          <button onClick={() => setMode("signin")} className={mode === "signin" ? "active-toggle" : ""}>Signin</button>
+          <button 
+            onClick={() => setMode("signup")} 
+            className={`toggle-button ${mode === "signup" ? "active-toggle" : ""}`}
+          >
+            Signup
+          </button>
+          <button 
+            onClick={() => setMode("signin")} 
+            className={`toggle-button ${mode === "signin" ? "active-toggle" : ""}`}
+          >
+            Signin
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="form">
