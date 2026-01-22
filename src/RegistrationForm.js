@@ -109,21 +109,21 @@ export default function RegisterForm() {
           <ul className="user-list">
             {users.map((user) => (
               <li key={user.id || user._id} className="user-card">
-                <div className="user-item-content">
-                  <span className="user-name">{user.name}</span>
-                  <span className="user-email">— {user.email}</span>
-                </div>
-    
-              
-                {user.email === loggedInUserEmail && (
-                  <button 
-                    className="delete-button" 
-                    onClick={() => handleDeleteUser(user.id || user._id)}
-                  >
-                    ×
-                  </button>
-                )}
-              </li>
+              <div className="user-item-content">
+                <div className="user-item-name">{user.name}</div>
+                <div className="user-item-email">— {user.email}</div>
+              </div>
+            
+              {/* Only show 'x' button for the logged-in user's own data */}
+              {user.email === loggedInUserEmail && (
+                <button 
+                  className="delete-button" 
+                  onClick={() => handleDeleteUser(user.id || user._id)}
+                >
+                  ×
+                </button>
+              )}
+            </li>
             ))}
           </ul>
         ) : (
