@@ -118,7 +118,7 @@ export default function RegisterForm() {
                 </li>
               ))}
             </ul>
-          ) : <p>No users found.</p>}
+          )}
         </div>
       )}
     </div>
