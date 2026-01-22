@@ -191,6 +191,18 @@
   gap: 15px;
 }
 
+.user-card {
+  background: #ffffff;      /* Pure white card */
+  border: 1px solid #e5e7eb; /* Light border to match input fields */
+  border-radius: 8px;       /* Rounded corners */
+  padding: 16px;            /* Internal breathing room */
+  margin-top: 12px;         /* Space between cards */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* Subtle depth */
+}
+
 .user-item-name {
   font-weight: 500;
   color: #111827;
