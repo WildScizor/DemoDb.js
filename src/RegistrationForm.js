@@ -104,25 +104,33 @@ export default function RegisterForm() {
       </div>
 
       {mode === "signin" && (
-        <div className="users-container">
-          {users.length > 0 ? (
-            <ul className="user-list">
-              {users.map((user) => (
-                <li key={user.id || user._id}>
-                  <div className="user-item-content">
-                    <span style={{ fontWeight: 'bold' }}>{user.name}</span>
-                    <span style={{ marginLeft: '10px', color: '#666' }}>— {user.email}</span>
-                  </div>
-                  {/* Only show 'x' button for the logged-in user's own data */}
-                  {user.email === loggedInUserEmail && (
-                    <button className="delete-button" onClick={() => handleDeleteUser(user.id || user._id)}>×</button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : <p>No registered users found.</p>}
-        </div>
-      )}
+      <div className="users-container">
+        {users.length > 0 ? (
+          <ul className="user-list">
+            {users.map((user) => (
+              <li key={user.id || user._id} className="user-card">
+                <div className="user-item-content">
+                  <span className="user-name">{user.name}</span>
+                  <span className="user-email">— {user.email}</span>
+                </div>
+    
+              
+                {user.email === loggedInUserEmail && (
+                  <button 
+                    className="delete-button" 
+                    onClick={() => handleDeleteUser(user.id || user._id)}
+                  >
+                    ×
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="no-users-text">No registered users found.</p>
+        )}
+      </div>
+    )}
     </div>
   );
 }
