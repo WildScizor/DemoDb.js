@@ -10,6 +10,8 @@ export default function RegisterForm() {
   const [message, setMessage] = useState("");
   const [users, setUsers] = useState([]);
   const [mode, setMode] = useState("signup");
+  // TRACK LOGGED IN USER
+  const [loggedInUserEmail, setLoggedInUserEmail] = useState("");
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -21,30 +23,25 @@ export default function RegisterForm() {
     setMessage("");
 
     try {
-      // CAUSE: Relative paths work on both local and Render. 
-      // REASON: /api/register tells the browser to talk to the server hosting these files.
       const endpoint = mode === "signup" ? "/api/register" : "/api/login";
-      
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
+      const data = await res.json();
 
       if (!res.ok) {
-        setMessage((data && (data.error || data.message)) || "Action failed");
+        setMessage(data.error || data.message || "Action failed");
         return;
       }
 
-      setMessage(data?.message || "Success");
-      if (mode === "signup") {
+      setMessage(data.message);
+      
+      if (mode === "signin") {
+        setLoggedInUserEmail(formData.email); // Save email on login
+      } else {
         setFormData({ name: "", email: "", password: "", confirmPassword: "" });
       }
     } catch (err) {
@@ -52,26 +49,30 @@ export default function RegisterForm() {
     }
   }
 
- async function fetchUsers() {
+  async function fetchUsers() {
     try {
-      const res = await fetch("/api/records"); 
+      const res = await fetch("/api/records");
       if (!res.ok) throw new Error("Failed to fetch users");
       const data = await res.json();
-      
-      // Safety check: ensure data is always an array
       setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
-      setUsers([]); // Clear list on error so it shows "No users found" properly
     }
   }
 
   async function handleDeleteUser(userId) {
     try {
-      const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete");
+      const res = await fetch(`/api/users/${userId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requesterEmail: loggedInUserEmail }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete");
+
       await fetchUsers();
-      setMessage("User deleted");
+      setMessage(data.message);
       setTimeout(() => setMessage(""), 2000);
     } catch (err) {
       setMessage("Error: " + err.message);
@@ -86,20 +87,16 @@ export default function RegisterForm() {
     <div className="auth-wrapper">
       <div className="auth-container">
         <div className="toggle-buttons">
-          <button type="button" onClick={() => setMode("signup")} className={`toggle-button ${mode === "signup" ? "active-toggle" : ""}`}>Signup</button>
-          <button type="button" onClick={() => setMode("signin")} className={`toggle-button ${mode === "signin" ? "active-toggle" : ""}`}>Signin</button>
+          <button onClick={() => setMode("signup")} className={mode === "signup" ? "active-toggle" : ""}>Signup</button>
+          <button onClick={() => setMode("signin")} className={mode === "signin" ? "active-toggle" : ""}>Signin</button>
         </div>
 
         <form onSubmit={handleSubmit} className="form">
           <div className="form-fields">
-            {mode === "signup" && (
-              <input name="name" placeholder="Full Name" value={formData.name} onChange={handleChange} required />
-            )}
+            {mode === "signup" && <input name="name" placeholder="Full Name" value={formData.name} onChange={handleChange} required />}
             <input name="email" type="email" placeholder="Email" value={formData.email} onChange={handleChange} required />
             <input name="password" type="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
-            {mode === "signup" && (
-              <input name="confirmPassword" type="password" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleChange} required />
-            )}
+            {mode === "signup" && <input name="confirmPassword" type="password" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleChange} required />}
           </div>
           <button type="submit">{mode === "signup" ? "Register" : "Login"}</button>
           {message && <div className={`message ${message.includes("Error") ? "error" : "success"}`}>{message}</div>}
@@ -113,16 +110,17 @@ export default function RegisterForm() {
               {users.map((user) => (
                 <li key={user.id || user._id}>
                   <div className="user-item-content">
-                    <span>{user.name}</span>
-                    <span>{user.email}</span>
+                    <span style={{ fontWeight: 'bold' }}>{user.name}</span>
+                    <span style={{ marginLeft: '10px', color: '#666' }}>— {user.email}</span>
                   </div>
-                  <button className="delete-button" onClick={() => handleDeleteUser(user.id || user._id)}>×</button>
+                  {/* Only show 'x' button for the logged-in user's own data */}
+                  {user.email === loggedInUserEmail && (
+                    <button className="delete-button" onClick={() => handleDeleteUser(user.id || user._id)}>×</button>
+                  )}
                 </li>
               ))}
             </ul>
-          ) : (
-            <p> No registered users found.</p>
-          )}
+          ) : <p>No registered users found.</p>}
         </div>
       )}
     </div>
