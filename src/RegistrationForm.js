@@ -52,15 +52,17 @@ export default function RegisterForm() {
     }
   }
 
-  async function fetchUsers() {
+ async function fetchUsers() {
     try {
-      // Updated to match the '/api/records' or '/api/users' logic in your server
       const res = await fetch("/api/records"); 
       if (!res.ok) throw new Error("Failed to fetch users");
       const data = await res.json();
-      setUsers(data);
+      
+      // Safety check: ensure data is always an array
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setUsers([]); // Clear list on error so it shows "No users found" properly
     }
   }
 
