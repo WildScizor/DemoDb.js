@@ -50,10 +50,26 @@ app.post("/api/login", async (req, res) => {
 
 app.get("/api/records", async (req, res) => {
   try {
-    const users = await User.find();
-    res.json(users);
+    const users = await User.find().lean();
+    // Convert _id to id so our frontend (user.id) actually works with mongoDB
+    const normalized = users.map(u => ({ 
+      ...u, 
+      id: u._id.toString() 
+    }));
+    res.json(normalized);
   } catch (err) {
     res.status(500).json({ error: "Could not fetch users" });
+  }
+});
+
+// ADDED: Missing delete route
+app.delete("/api/users/:id", async (req, res) => {
+  try {
+    const deleted = await User.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "User not found" });
+    res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: "Delete failed" });
   }
 });
 
